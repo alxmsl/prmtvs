@@ -27,7 +27,7 @@ func (s *SMSuite) TestSM(c *C) {
 		{"a", 5},
 	}
 
-	sm := NewSM()
+	sm := NewSKM()
 
 	// Add test
 	for _, d := range ds {

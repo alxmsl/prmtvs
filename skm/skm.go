@@ -9,7 +9,7 @@ type SKM struct {
 	kk []string
 }
 
-func NewSM() *SKM {
+func NewSKM() *SKM {
 	return &SKM{
 		m:  map[string]interface{}{},
 		kk: []string{},
