@@ -1,4 +1,4 @@
-package pn
+package skm
 
 import (
 	"strings"
