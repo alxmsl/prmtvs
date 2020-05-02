@@ -14,7 +14,7 @@ type SMSuite struct{}
 
 var _ = Suite(&SMSuite{})
 
-func (s *SMSuite) TestSM(c *C) {
+func (s *SMSuite) TestInterface(c *C) {
 	ds := []struct {
 		string
 		int
