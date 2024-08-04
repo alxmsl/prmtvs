@@ -6,8 +6,8 @@ Some primitives structures:
 
 ## Plx - channels plexus
 
-Struct is a synchronization primitive based on the queue of channels. It helps to link several inputs to several 
- outputs. 
+Struct is a synchronization primitive based on the queue of channels. It helps to link several senders to several 
+ receivers. 
 
 ## Skm - sorted keys map
 
