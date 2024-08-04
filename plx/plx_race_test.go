@@ -8,11 +8,11 @@ import (
 	"time"
 )
 
-// TestCloseUnblocksRecv checks that Close unblocks a waiting Recv.
-// The test contains a race because it closes plexus on the receiving operation.
+// TestCloseUnblocksRecv checks that Plexus.Close unblocks a waiting Plexus.Recv.
+// The test contains a race because it closes Plexus on the receiving operation
 func (s *PlexSuite) TestCloseUnblocksRecv(c *C) {
 	var (
-		pl   = NewPlexus()
+		pl   = NewPlexus(1, 1)
 		done = make(chan bool)
 	)
 	go func() {
@@ -24,11 +24,11 @@ func (s *PlexSuite) TestCloseUnblocksRecv(c *C) {
 	c.Assert(<-done, Equals, true)
 }
 
-// TestSendPanicsOnClose checks that a blocked Send panics on Close.
-// The test contains a race because it closes plexus on the sending operation.
+// TestSendPanicsOnClose checks that a blocked Plexus.Send panics on Plexus.Close.
+// The test contains a race because it closes Plexus on the sending operation
 func (s *PlexSuite) TestSendPanicsOnClose(c *C) {
 	var (
-		pl   = NewPlexus()
+		pl   = NewPlexus(1, 1)
 		done = make(chan interface{})
 	)
 	go func() {
