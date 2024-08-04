@@ -9,15 +9,6 @@ const (
 	factorO = 10 // Should not be less than 0.
 )
 
-type mergeableInt int
-
-func (a mergeableInt) Merge(b Mergeable) Mergeable {
-	if _, ok := b.(mergeableInt); !ok {
-		panic("value does not implement plexus.mergeableInt")
-	}
-	return a + b.(mergeableInt)
-}
-
 type XiXoSuite struct{}
 
 var (
@@ -31,24 +22,24 @@ func (s *XiXoSuite) TestMiMo(c *C) {
 	pl.AddO(factorO)
 	pl.AddI(factorI)
 	// Receive merged value from the plexus.
-	var done = make(chan mergeableInt)
+	var done = make(chan Counter)
 	for i := 0; i < factorO; i++ {
 		go func() {
 			v, _ := pl.Recv()
-			done <- v.(mergeableInt)
+			done <- v.(Counter)
 		}()
 	}
 	// Send sequential values to the plexus.
 	for i := 0; i < factorI; i += 1 {
-		go func(i int) { pl.Send(mergeableInt(i + 1)) }(i)
+		go func(i int) { pl.Send(Counter(i + 1)) }(i)
 	}
 	// Check result. Should be sum of numbers up to `factorI`: n * (n + 1) / 2.
 	// Result is multiplied by `factorO` (number of receivers).
-	var res mergeableInt
+	var res Counter
 	for i := 0; i < factorO; i += 1 {
 		res += <-done
 	}
-	c.Assert(res, Equals, mergeableInt(factorO*factorI*(factorI+1)/2))
+	c.Assert(res, Equals, Counter(factorO*factorI*(factorI+1)/2))
 }
 
 // TestMiSo checks multiple-input and single-output plexus.
@@ -58,12 +49,12 @@ func (s *XiXoSuite) TestMiSo(c *C) {
 	pl.AddI(factorI)
 	// Send sequential values to the plexus.
 	for i := 0; i < factorI; i += 1 {
-		go func(i int) { pl.Send(mergeableInt(i + 1)) }(i)
+		go func(i int) { pl.Send(Counter(i + 1)) }(i)
 	}
 	// Check result. Should be equal the sum of numbers up to `factorI`: n * (n + 1) / 2.
 	v, ok := pl.Recv()
 	c.Assert(ok, Equals, true)
-	c.Assert(v, Equals, mergeableInt(factorI*(factorI+1)/2))
+	c.Assert(v, Equals, Counter(factorI*(factorI+1)/2))
 }
 
 // TestSiMo checks single-input and multiple-output plexus.
