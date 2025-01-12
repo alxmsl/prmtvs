@@ -1,127 +1,91 @@
 package skm
 
-import (
-	"sync"
-)
+// OverFunc represents an item processor to go through the SKM.
+// Function accepts index, key and value.
+// OverFunc returns bool value to continue or stop the loop.
+type OverFunc func(idx int, key string, value interface{}) bool
 
+// SKM struct represents a map with a sorted set of keys.
 type SKM struct {
-	sync.RWMutex
-	ca bool
-
-	m  map[string]interface{}
+	mm map[string]interface{}
 	kk []string
 }
 
-func NewSafeSKM() *SKM {
-	skm := NewSKM()
-	skm.ca = true
-	return skm
-}
-
-func NewSKM() *SKM {
+// NewSortedKeyMap creates a SKM object.
+func NewSortedKeyMap() *SKM {
 	return &SKM{
-		m:  map[string]interface{}{},
+		mm: map[string]interface{}{},
 		kk: []string{},
 	}
 }
 
-func (sm *SKM) Add(k string, v interface{}) bool {
-	if sm.ca {
-		sm.Lock()
-		defer sm.Unlock()
-	}
-	if _, ok := sm.m[k]; ok {
-		return !ok
+func (sm *SKM) Add(key string, value interface{}) bool {
+	if _, ok := sm.mm[key]; ok {
+		return false
 	}
 
-	i := 0
-	for i = 0; i < len(sm.kk); i += 1 {
-		if k < sm.kk[i] {
+	var idx = 0
+	for idx = 0; idx < len(sm.kk); idx += 1 {
+		if key < sm.kk[idx] {
 			break
 		}
 	}
-	sm.kk = append(sm.kk[:i], append([]string{k}, sm.kk[i:]...)...)
-	sm.m[k] = v
+	sm.kk = append(sm.kk[:idx], append([]string{key}, sm.kk[idx:]...)...)
+	sm.mm[key] = value
 	return true
 }
 
-func (sm *SKM) ExistsIndex(i int) bool {
-	if sm.ca {
-		sm.RLock()
-		defer sm.RUnlock()
-	}
-	return i >= 0 && i < len(sm.kk)
+func (sm *SKM) ExistsIndex(idx int) bool {
+	return idx >= 0 && idx < len(sm.kk)
 }
 
-func (sm *SKM) ExistsKey(k string) bool {
-	if sm.ca {
-		sm.RLock()
-		defer sm.RUnlock()
-	}
-	_, ok := sm.m[k]
+func (sm *SKM) ExistsKey(key string) bool {
+	_, ok := sm.mm[key]
 	return ok
 }
 
-func (sm *SKM) GetByKey(k string) (interface{}, bool) {
-	if sm.ca {
-		sm.RLock()
-		defer sm.RUnlock()
-	}
-	p, ok := sm.m[k]
-	return p, ok
-}
-
-func (sm *SKM) GetByIndex(i int) (interface{}, bool) {
-	if sm.ca {
-		sm.RLock()
-		defer sm.RUnlock()
-	}
-	if i < 0 || i >= len(sm.kk) {
+func (sm *SKM) GetByIndex(idx int) (interface{}, bool) {
+	if idx < 0 || idx >= len(sm.kk) {
 		return nil, false
 	}
-	v, ok := sm.m[sm.kk[i]]
+	v, ok := sm.mm[sm.kk[idx]]
 	return v, ok
 }
 
-func (sm *SKM) Index(k string) int {
-	if sm.ca {
-		sm.RLock()
-		defer sm.RUnlock()
-	}
-	for i, n := range sm.kk {
-		if k == n {
-			return i
-		}
-	}
-	return -1
+func (sm *SKM) GetByKey(key string) (interface{}, bool) {
+	p, ok := sm.mm[key]
+	return p, ok
 }
 
-func (sm *SKM) Key(i int) string {
-	if sm.ca {
-		sm.RLock()
-		defer sm.RUnlock()
+func (sm *SKM) Index(key string) (int, bool) {
+	for idx, k := range sm.kk {
+		if key == k {
+			return idx, true
+		}
 	}
-	return sm.kk[i]
+	return 0, false
+}
+
+func (sm *SKM) Key(idx int) (string, bool) {
+	if idx < 0 || idx >= len(sm.kk) {
+		return "", false
+	}
+	return sm.kk[idx], true
 }
 
 func (sm *SKM) Len() int {
-	if sm.ca {
-		sm.RLock()
-		defer sm.RUnlock()
-	}
 	return len(sm.kk)
 }
 
-type OverFunc func(int, string, interface{}) bool
-
 func (sm *SKM) Over(fn OverFunc) {
-	if sm.ca {
-		sm.RLock()
-		defer sm.RUnlock()
-	}
-	for i, n := range sm.kk {
-		if !fn(i, n, sm.m[n]) {
+	for idx, key := range sm.kk {
+		if !fn(idx, key, sm.mm[key]) {
 			break
 		}
 	}
+}
+
+func (sm *SKM) Reset() {
+	sm.mm = map[string]interface{}{}
+	sm.kk = []string{}
 }
