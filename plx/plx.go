@@ -59,6 +59,8 @@ type Plexus struct {
 
 	// recvn is a number of simultaneous receivers
 	recvn int
+	// recvr is ready-channel for the select statement on Plexus.Recv operations
+	recvr chan struct{}
 	// recvq is a queue of blocked receivers
 	recvq *queue.Queue
 
@@ -66,8 +68,6 @@ type Plexus struct {
 	sendn int
 	// sendq is a queue of blocked senders
 	sendq *queue.Queue
-
-	recvr chan struct{}
 }
 
 // NewPlexus creates a plexus with an initial number of simultaneous receivers and senders
@@ -135,13 +135,19 @@ func (m *Plexus) Recv() (any, bool) {
 		m.lock.Unlock()
 		return nil, false
 	}
+	// If there are not enough waiting receiver(s) or sender(s), then go ahead with block and enqueue the receiver
+	if (m.recvq.Length()+1) < m.recvn || m.sendq.Length() < m.sendn {
+		// Enqueue a receiver
+		var ch = make(chan any)
+		m.recvq.Add(ch)
+		m.lock.Unlock()
+		// Block the execution till a sender
+		v, ok := <-ch
+		return v, ok
+	}
 
 	switch m.State() {
 	case SsSr:
-		// If there is no waiting sender, then go ahead with block and enqueue the receiver
-		if m.sendq.Length() < m.sendn {
-			break
-		}
 		// Dequeue a sender.
 		var schs = dequeue(m.sendq, 1)
 		m.lock.Unlock()
@@ -150,14 +156,6 @@ func (m *Plexus) Recv() (any, bool) {
 		close(schs[0])
 		return v, ok
 	case SsMr:
-		// If there are not enough waiting receivers, then go ahead with block and enqueue the receiver
-		if (m.recvq.Length() + 1) < m.recvn {
-			break
-		}
-		// If there is recvn waiting sender, then go ahead with block and enqueue the receiver
-		if m.sendq.Length() < m.sendn {
-			break
-		}
 		// Dequeue a sender and receivers
 		var schs = dequeue(m.sendq, 1)
 		var rchs = dequeue(m.recvq, m.recvn-1)
@@ -174,10 +172,6 @@ func (m *Plexus) Recv() (any, bool) {
 		// Return value from the sender to the current receiver
 		return v, ok
 	case MsSr:
-		// If there is not enough senders, then go ahead with block and enqueue the receiver
-		if m.sendq.Length() < m.sendn {
-			break
-		}
 		// Dequeue senders
 		var schs = dequeue(m.sendq, m.sendn)
 		m.lock.Unlock()
@@ -186,14 +180,8 @@ func (m *Plexus) Recv() (any, bool) {
 		res = merge(schs, res)
 		return res, true
 	case MsMr:
-		// If there are not enough waiting receivers, then go ahead with block and enqueue the receiver
-		if (m.recvq.Length() + 1) < m.recvn {
-			break
-		}
-		// If there is not enough senders, then go ahead with block and enqueue the receiver
-		if m.sendq.Length() < m.sendn {
-			break
-		}
+		fallthrough
+	default:
 		// Dequeue receivers and senders
 		var rchs = dequeue(m.recvq, m.recvn-1)
 		var schs = dequeue(m.sendq, m.sendn)
@@ -208,14 +196,6 @@ func (m *Plexus) Recv() (any, bool) {
 		// Return the merged value to the current receiver
 		return res, true
 	}
-
-	// Enqueue a receiver
-	var ch = make(chan any)
-	m.recvq.Add(ch)
-	m.lock.Unlock()
-	// Block the execution till a sender
-	v, ok := <-ch
-	return v, ok
 }
 
 func (m *Plexus) Send(v any) {
@@ -227,25 +207,26 @@ func (m *Plexus) Send(v any) {
 		m.lock.Unlock()
 		panic(ErrorSendToClosedPlexus)
 	}
+	// If there is not enough sender(s) or no waiting receiver(s), then go ahead with block and enqueue the sender
+	if (m.sendq.Length()+1) < m.sendn || m.recvq.Length() < m.recvn {
+		// Enqueue a sender
+		var ch = make(chan any)
+		m.sendq.Add(ch)
+		m.lock.Unlock()
+		// Block the execution till a receiver
+		ch <- v
+		return
+	}
 
 	switch m.State() {
 	case SsSr:
-		// If there is no waiting receiver, then go ahead with block and enqueue the sender
-		if m.recvq.Length() < m.recvn {
-			break
-		}
 		// Dequeue a receiver
 		var rchs = dequeue(m.recvq, 1)
 		m.lock.Unlock()
 		// Pass value to receiver and close it
 		rchs[0] <- v
 		close(rchs[0])
-		return
 	case SsMr:
-		// If there are not enough waiting receivers, then go ahead with block and enqueue the sender
-		if m.recvq.Length() < m.recvn {
-			break
-		}
 		// Dequeue receivers
 		var rchs = dequeue(m.recvq, m.recvn)
 		m.lock.Unlock()
@@ -254,16 +235,7 @@ func (m *Plexus) Send(v any) {
 			rch <- v
 			close(rch)
 		}
-		return
 	case MsSr:
-		// If there is not enough senders, then go ahead with block and enqueue the receiver
-		if (m.sendq.Length() + 1) < m.sendn {
-			break
-		}
-		// If there is no waiting receiver, then go ahead with block and enqueue the sender
-		if m.recvq.Length() < m.recvn {
-			break
-		}
 		// Value must implement the Mergeable interface to be passed
 		if _, ok := v.(Mergeable); !ok {
 			panic(ErrorValueIsNotMergeable)
@@ -277,16 +249,7 @@ func (m *Plexus) Send(v any) {
 		res = merge(schs, res)
 		rchs[0] <- res
 		close(rchs[0])
-		return
 	case MsMr:
-		// If there is not enough senders, then go ahead with block and enqueue the receiver
-		if (m.sendq.Length() + 1) < m.sendn {
-			break
-		}
-		// If there are not enough waiting receivers, then go ahead with block and enqueue the sender
-		if m.recvq.Length() < m.recvn {
-			break
-		}
 		// Value must implement the Mergeable interface to be passed
 		if _, ok := v.(Mergeable); !ok {
 			panic(ErrorValueIsNotMergeable)
@@ -302,18 +265,10 @@ func (m *Plexus) Send(v any) {
 			rch <- res
 			close(rch)
 		}
-		return
 	}
-
-	// Enqueue a sender
-	var ch = make(chan any)
-	m.sendq.Add(ch)
-	m.lock.Unlock()
-	// Block the execution till a receiver
-	ch <- v
 }
 
-func (m *Plexus) CanReceive() chan struct{} {
+func (m *Plexus) ReadyReceive() chan struct{} {
 	return m.recvr
 }
 
