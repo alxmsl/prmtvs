@@ -11,8 +11,8 @@ const (
 )
 
 var (
-	skm  = NewSKM()
-	sskm = NewSafeSKM()
+	skm  = NewSortedKeyMap()
+	sskm = NewSafeSortedKeyMap()
 	keys = make([]string, datasetSize)
 )
 
